@@ -151,6 +151,43 @@
 #define ZVAL_STATIC_INIT zval_used_for_init
 #endif
 
+#ifdef ZEND_HASH_GET_APPLY_COUNT /* PHP 7.2 or earlier recursion protection */
+static inline zend_bool php_phongo_zend_hash_apply_protection_begin(HashTable *ht) {
+	if (!ht) { return 1; }
+	if (ZEND_HASH_GET_APPLY_COUNT(ht) > 0) {
+		return 0;
+	}
+	if (ZEND_HASH_APPLY_PROTECTION(ht)) {
+		ZEND_HASH_INC_APPLY_COUNT(ht);
+	}
+	return 1;
+}
+static inline zend_bool php_phongo_zend_hash_apply_protection_end(HashTable *ht) {
+	if (ZEND_HASH_GET_APPLY_COUNT(ht) == 0) {
+		return 0;
+	}
+	if (ZEND_HASH_APPLY_PROTECTION(ht)) {
+		ZEND_HASH_DEC_APPLY_COUNT(ht);
+	}
+	return 1;
+}
+#else /* PHP 7.3 or later */
+static inline zend_bool php_phongo_zend_hash_apply_protection_begin(zend_array *ht) {
+	if (GC_IS_RECURSIVE(ht)) {
+		return 0;
+	}
+	GC_PROTECT_RECURSION(ht);
+	return 1;
+}
+static inline zend_bool php_phongo_zend_hash_apply_protection_end(HashTable *ht) {
+	if (!GC_IS_RECURSIVE(ht)) {
+		return 0;
+	}
+	GC_UNPROTECT_RECURSION(ht);
+	return 1;
+}
+#endif
+
 #if SIZEOF_PHONGO_LONG == 8
 #define ADD_INDEX_INT64(zval, index, value) add_index_long(zval, index, value)
 #define ADD_NEXT_INDEX_INT64(zval, value) add_next_index_long(zval, value)
